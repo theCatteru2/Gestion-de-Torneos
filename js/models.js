@@ -27,6 +27,8 @@ class Match {
         this.isPlayed = false;
         this.stage = stage; 
         this.customResultText = ""; 
+        this.roundNumber = 0;
+        this.groupName = "";
     }
 }
 
