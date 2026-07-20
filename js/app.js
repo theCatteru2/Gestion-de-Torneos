@@ -55,8 +55,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             generateGroupStageMatches();
+            initializeKnockoutBracket(); 
             renderMatches();
             renderStandings();
+            renderKnockout(); 
             document.querySelector('.tab-btn[data-target="matches"]').click();
         }
     });
