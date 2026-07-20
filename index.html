@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestionador de Torneos</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Gestionador de Torneos</h1>
+        <div class="file-controls">
+            <button id="btn-save" class="btn-primary">Guardar Torneo</button>
+            <input type="file" id="input-load" accept=".json">
+        </div>
+        <nav id="tabs">
+            <button class="tab-btn active" data-target="config">Configuración</button>
+            <button class="tab-btn" data-target="matches">Partidos</button>
+            <button class="tab-btn" data-target="standings">Tablas</button>
+            <button class="tab-btn" data-target="knockout">Eliminatorias</button>
+        </nav>
+    </header>
+
+    <main>
+        <!-- Sección de Configuración -->
+        <section id="config" class="tab-content active">
+            <h2>Configuración del Torneo</h2>
+            <div class="form-group">
+                <label for="mode-select">Modalidad:</label>
+                <select id="mode-select" class="form-control">
+                    <option value="league">Liga Básica</option>
+                    <option value="tournament">Torneo Personalizado</option>
+                </select>
+            </div>
+
+            <!-- Contenedor para Liga Básica -->
+            <div id="league-setup">
+                <div class="form-group">
+                    <label for="team-input">Equipos (Ingresa uno por línea):</label>
+                    <textarea id="team-input" class="form-control" rows="8" placeholder="Equipo 1&#10;Equipo 2&#10;Equipo 3&#10;Equipo 4"></textarea>
+                </div>
+            </div>
+
+            <!-- Contenedor para Torneo Personalizado -->
+            <div id="tournament-setup" style="display: none;">
+                <div class="form-group">
+                    <label for="participant-count">Cantidad de participantes:</label>
+                    <select id="participant-count" class="form-control">
+                        <option value="4">4 Equipos (1 Grupo, Final)</option>
+                        <option value="8">8 Equipos (2 Grupos, Semifinales)</option>
+                        <option value="12">12 Equipos (3 Grupos, Cuartos con Mejores Terceros)</option>
+                        <option value="16">16 Equipos (4 Grupos, Cuartos)</option>
+                        <option value="20">20 Equipos (5 Grupos, Octavos con Mejores Terceros)</option>
+                        <option value="24">24 Equipos (6 Grupos, Octavos con Mejores Terceros)</option>
+                        <option value="28">28 Equipos (7 Grupos, Octavos con Mejores Terceros)</option>
+                        <option value="32">32 Equipos (8 Grupos, Octavos)</option>
+                        <option value="36">36 Equipos (9 Grupos, Dieciseisavos con Mejores Terceros)</option>
+                        <option value="40">40 Equipos (10 Grupos, Dieciseisavos con Mejores Terceros)</option>
+                        <option value="44">44 Equipos (11 Grupos, Dieciseisavos con Mejores Terceros)</option>
+                        <option value="48">48 Equipos (12 Grupos, Dieciseisavos con Mejores Terceros)</option>
+                        <option value="52">52 Equipos (13 Grupos, Dieciseisavos con Mejores Terceros)</option>
+                        <option value="56">56 Equipos (14 Grupos, Dieciseisavos con Mejores Terceros)</option>
+                        <option value="60">60 Equipos (15 Grupos, Treintaidosavos con Mejores Terceros)</option>
+                        <option value="64">64 Equipos (16 Grupos, Dieciseisavos)</option>
+                    </select>
+                </div>
+                <div id="pots-container">
+                    <!-- Los textareas de los 4 bombos se generarán aquí mediante JS -->
+                </div>
+                <button id="btn-draw" class="btn-primary" style="background-color: #28a745; margin-bottom: 15px;">Realizar Sorteo</button>
+                <div id="draw-results"></div>
+            </div>
+
+            <button id="btn-generate" class="btn-primary">Generar Fixture</button>
+        </section>
+
+        <!-- Sección de Partidos -->
+        <section id="matches" class="tab-content">
+            <h2>Gestión de Partidos</h2>
+            <div id="matches-container"></div>
+        </section>
+
+        <!-- Sección de Tablas de Posiciones -->
+        <section id="standings" class="tab-content">
+            <h2>Tablas de Posiciones</h2>
+            <div id="standings-container"></div>
+        </section>
+
+        <!-- Sección de Llaves Eliminatorias -->
+        <section id="knockout" class="tab-content">
+            <h2>Ronda Eliminatoria</h2>
+            <div id="bracket-container" class="bracket">
+                <p>Esta sección gestionará las fases finales del Torneo Personalizado.</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Archivos JavaScript en orden estricto de dependencia -->
+    <script src="js/models.js"></script>
+    <script src="js/logic.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
