@@ -159,6 +159,7 @@ function renderStandings() {
         groupsWrapper.style.gap = '20px';
 
         let thirds = []; 
+        const { bestThirdsNeeded } = getTournamentStructureInfo();
 
         for (const [groupName, groupTeams] of Object.entries(AppState.groups)) {
             const sortedGroupTeams = sortStandings([...groupTeams]);
@@ -174,13 +175,12 @@ function renderStandings() {
 
         container.appendChild(groupsWrapper);
 
-        // Renderizado de la tabla de mejores terceros
-        if (thirds.length > 0) {
+        if (bestThirdsNeeded > 0 && thirds.length > 0) {
             const sortedThirds = sortStandings(thirds);
             const thirdsContainer = document.createElement('div');
             thirdsContainer.style.marginTop = "30px";
             thirdsContainer.style.width = "100%";
-            thirdsContainer.appendChild(createStandingsTable(sortedThirds, "Tabla de Mejores Terceros"));
+            thirdsContainer.appendChild(createStandingsTable(sortedThirds, `Tabla de Mejores Terceros (Clasifican ${bestThirdsNeeded})`));
             container.appendChild(thirdsContainer);
         }
     }
@@ -245,7 +245,9 @@ window.saveMatchResult = function(matchId) {
 
     processMatchResult(matchId, scoreAInput, scoreBInput);
     renderStandings();
+    if (AppState.mode === 'tournament') renderKnockout();
 };
+
 // =======================================================
 // NUEVAS FUNCIONES PARA LA RONDA ELIMINATORIA (BRACKET)
 // =======================================================
@@ -255,14 +257,7 @@ function renderKnockout() {
     container.innerHTML = "";
 
     if (!AppState.bracket || !AppState.bracket.rounds || AppState.bracket.rounds.length === 0) {
-        container.innerHTML = `
-            <p>El fixture eliminatorio se generará al finalizar la fase de grupos o cuando decidas avanzar.</p>
-            <button id="btn-generate-knockout" class="btn-primary">Generar Eliminatoria</button>
-        `;
-        document.getElementById('btn-generate-knockout').addEventListener('click', () => {
-            generateKnockoutBracket();
-            renderKnockout();
-        });
+        container.innerHTML = `<p>El fixture eliminatorio se visualizará al inicializar el torneo.</p>`;
         return;
     }
 
@@ -274,7 +269,7 @@ function renderKnockout() {
 
     AppState.bracket.rounds.forEach(round => {
         const roundCol = document.createElement('div');
-        roundCol.style.minWidth = "260px"; // Expandido para acomodar el input
+        roundCol.style.minWidth = "260px";
         roundCol.innerHTML = `<h3>${round.name}</h3>`;
 
         round.matches.forEach(match => {
@@ -288,25 +283,25 @@ function renderKnockout() {
             const teamAClass = match.winnerId && match.teamA && match.winnerId == match.teamA.id ? 'bracket-team winner' : 'bracket-team';
             const teamBClass = match.winnerId && match.teamB && match.winnerId == match.teamB.id ? 'bracket-team winner' : 'bracket-team';
 
-            // Estructura Flexbox para alinear nombre e input. event.stopPropagation() evita seleccionar ganador al escribir.
-            const tA = match.teamA ? `
-                <div class="${teamAClass}" style="display: flex; justify-content: space-between; align-items: center;" onclick="selectWinner('${match.id}', '${match.teamA.id}')">
-                    <span style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${match.teamA.name}</span>
-                    <input type="text" class="form-control" style="width: 55px; height: 35px; text-align: center; padding: 2px; margin-left: 10px;" placeholder="-" value="${match.scoreA || ''}" onchange="updateKnockoutScore('${match.id}', 'A', this.value)" onclick="event.stopPropagation()">
-                </div>` : `
-                <div class="bracket-team" style="display: flex; justify-content: space-between; align-items: center; color: #888;">
-                    <span>Por definir</span>
-                    <input type="text" class="form-control" style="width: 55px; height: 35px;" disabled>
+            // Parámetros dinámicos de renderizado (Slot temporal vs Equipo clasificado)
+            const labelA = match.teamA ? match.teamA.name : (match.slotA ? match.slotA.label : "Por definir");
+            const colorA = match.teamA ? "var(--text-main)" : "var(--text-muted)";
+            const pointerA = match.teamA ? `onclick="selectWinner('${match.id}', '${match.teamA.id}')"` : "";
+
+            const labelB = match.teamB ? match.teamB.name : (match.slotB ? match.slotB.label : "Por definir");
+            const colorB = match.teamB ? "var(--text-main)" : "var(--text-muted)";
+            const pointerB = match.teamB ? `onclick="selectWinner('${match.id}', '${match.teamB.id}')"` : "";
+
+            const tA = `
+                <div class="${teamAClass}" style="display: flex; justify-content: space-between; align-items: center; color: ${colorA};" ${pointerA}>
+                    <span style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${labelA}</span>
+                    <input type="text" class="form-control" style="width: 55px; height: 35px; text-align: center; padding: 2px; margin-left: 10px;" placeholder="-" value="${match.scoreA || ''}" onchange="updateKnockoutScore('${match.id}', 'A', this.value)" onclick="event.stopPropagation()" ${!match.teamA ? 'disabled' : ''}>
                 </div>`;
 
-            const tB = match.teamB ? `
-                <div class="${teamBClass}" style="display: flex; justify-content: space-between; align-items: center;" onclick="selectWinner('${match.id}', '${match.teamB.id}')">
-                    <span style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${match.teamB.name}</span>
-                    <input type="text" class="form-control" style="width: 55px; height: 35px; text-align: center; padding: 2px; margin-left: 10px;" placeholder="-" value="${match.scoreB || ''}" onchange="updateKnockoutScore('${match.id}', 'B', this.value)" onclick="event.stopPropagation()">
-                </div>` : `
-                <div class="bracket-team" style="display: flex; justify-content: space-between; align-items: center; color: #888;">
-                    <span>Por definir</span>
-                    <input type="text" class="form-control" style="width: 55px; height: 35px;" disabled>
+            const tB = `
+                <div class="${teamBClass}" style="display: flex; justify-content: space-between; align-items: center; color: ${colorB};" ${pointerB}>
+                    <span style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${labelB}</span>
+                    <input type="text" class="form-control" style="width: 55px; height: 35px; text-align: center; padding: 2px; margin-left: 10px;" placeholder="-" value="${match.scoreB || ''}" onchange="updateKnockoutScore('${match.id}', 'B', this.value)" onclick="event.stopPropagation()" ${!match.teamB ? 'disabled' : ''}>
                 </div>`;
 
             matchDiv.innerHTML = `${tA}${tB}`;
@@ -318,7 +313,6 @@ function renderKnockout() {
     container.appendChild(wrapper);
 }
 
-// Almacena el resultado individual de cada equipo en el nodo correspondiente
 window.updateKnockoutScore = function(matchId, teamKey, value) {
     let foundMatch = null;
     AppState.bracket.rounds.forEach(r => {
@@ -330,7 +324,6 @@ window.updateKnockoutScore = function(matchId, teamKey, value) {
     }
 };
 
-// Valida que ambos resultados estén ingresados y transfiere la instancia del equipo a la siguiente ronda
 window.selectWinner = function(matchId, teamId) {
     let foundMatch = null;
     AppState.bracket.rounds.forEach(r => {
