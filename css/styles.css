@@ -1,21 +1,24 @@
 /* Tema Claro (Por defecto) */
 :root {
-    --primary-color: #0056b3;
-    --primary-hover: #004494;
-    --bg-color: #f8f9fa;
-    --card-bg: #ffffff;
-    --border-color: #dee2e6;
-    --text-color: #333333;
-}
 
-/* Tema Oscuro */
-body.dark-theme {
     --primary-color: #375a7f;
     --primary-hover: #2b4764;
     --bg-color: #121212;
     --card-bg: #1e1e1e;
     --border-color: #333333;
     --text-color: #e0e0e0;
+}
+
+/* Tema Oscuro */
+body.dark-theme {
+
+    --primary-color: #0056b3;
+    --primary-hover: #004494;
+    --bg-color: #f8f9fa;
+    --card-bg: #ffffff;
+    --border-color: #dee2e6;
+    --text-color: #333333;
+
 }
 
 * {
