@@ -10,6 +10,11 @@ function setupTabs() {
             button.classList.add('active');
             const targetId = button.getAttribute('data-target');
             document.getElementById(targetId).classList.add('active');
+
+            // Renderizado de actualización automática al entrar a la pestaña de Eliminatorias
+            if (targetId === 'knockout') {
+                renderKnockout();
+            }
         });
     });
 }
@@ -39,7 +44,6 @@ function setupModeToggle() {
 function setupThemeToggle() {
     const themeBtn = document.getElementById('btn-theme');
     
-    // Verificar si hay un tema guardado previamente en el almacenamiento local
     if (localStorage.getItem('theme') === 'dark') {
         document.body.classList.add('dark-theme');
     }
@@ -48,7 +52,6 @@ function setupThemeToggle() {
         themeBtn.addEventListener('click', () => {
             document.body.classList.toggle('dark-theme');
             
-            // Guardar la preferencia actual
             if (document.body.classList.contains('dark-theme')) {
                 localStorage.setItem('theme', 'dark');
             } else {
@@ -139,9 +142,58 @@ function renderStandings() {
 
     if (AppState.teams.length === 0) return;
 
-    // Filtrar el equipo 'BYE' utilizado para balances impares y ordenar
-    const activeTeams = AppState.teams.filter(t => t.id !== 'BYE');
-    const sortedTeams = sortStandings([...activeTeams]);
+    if (AppState.mode === 'league') {
+        const activeTeams = AppState.teams.filter(t => t.id !== 'BYE');
+        const sortedTeams = sortStandings([...activeTeams]);
+        container.appendChild(createStandingsTable(sortedTeams, "Tabla de Posiciones"));
+
+    } else if (AppState.mode === 'tournament') {
+        if (Object.keys(AppState.groups).length === 0) {
+            container.innerHTML = "<p>Realiza el sorteo para ver las tablas de grupos.</p>";
+            return;
+        }
+
+        const groupsWrapper = document.createElement('div');
+        groupsWrapper.style.display = 'flex';
+        groupsWrapper.style.flexWrap = 'wrap';
+        groupsWrapper.style.gap = '20px';
+
+        let thirds = []; 
+
+        for (const [groupName, groupTeams] of Object.entries(AppState.groups)) {
+            const sortedGroupTeams = sortStandings([...groupTeams]);
+            if (sortedGroupTeams[2]) thirds.push(sortedGroupTeams[2]); 
+
+            const groupContainer = document.createElement('div');
+            groupContainer.style.flex = '1 1 45%';
+            groupContainer.style.minWidth = '300px';
+
+            groupContainer.appendChild(createStandingsTable(sortedGroupTeams, `Grupo ${groupName}`));
+            groupsWrapper.appendChild(groupContainer);
+        }
+
+        container.appendChild(groupsWrapper);
+
+        // Renderizado de la tabla de mejores terceros
+        if (thirds.length > 0) {
+            const sortedThirds = sortStandings(thirds);
+            const thirdsContainer = document.createElement('div');
+            thirdsContainer.style.marginTop = "30px";
+            thirdsContainer.style.width = "100%";
+            thirdsContainer.appendChild(createStandingsTable(sortedThirds, "Tabla de Mejores Terceros"));
+            container.appendChild(thirdsContainer);
+        }
+    }
+}
+
+function createStandingsTable(teams, titleText) {
+    const wrapper = document.createElement('div');
+    
+    if (titleText) {
+        const title = document.createElement('h3');
+        title.textContent = titleText;
+        wrapper.appendChild(title);
+    }
 
     let tableHTML = `
         <table>
@@ -161,7 +213,7 @@ function renderStandings() {
             <tbody>
     `;
 
-    sortedTeams.forEach(team => {
+    teams.forEach(team => {
         tableHTML += `
             <tr>
                 <td>${team.name}</td>
@@ -178,7 +230,8 @@ function renderStandings() {
     });
 
     tableHTML += `</tbody></table>`;
-    container.innerHTML = tableHTML;
+    wrapper.innerHTML += tableHTML;
+    return wrapper;
 }
 
 window.saveMatchResult = function(matchId) {
@@ -192,5 +245,116 @@ window.saveMatchResult = function(matchId) {
 
     processMatchResult(matchId, scoreAInput, scoreBInput);
     renderStandings();
-    alert("Resultado guardado y tabla actualizada.");
+};
+// =======================================================
+// NUEVAS FUNCIONES PARA LA RONDA ELIMINATORIA (BRACKET)
+// =======================================================
+
+function renderKnockout() {
+    const container = document.getElementById('bracket-container');
+    container.innerHTML = "";
+
+    if (!AppState.bracket || !AppState.bracket.rounds || AppState.bracket.rounds.length === 0) {
+        container.innerHTML = `
+            <p>El fixture eliminatorio se generará al finalizar la fase de grupos o cuando decidas avanzar.</p>
+            <button id="btn-generate-knockout" class="btn-primary">Generar Eliminatoria</button>
+        `;
+        document.getElementById('btn-generate-knockout').addEventListener('click', () => {
+            generateKnockoutBracket();
+            renderKnockout();
+        });
+        return;
+    }
+
+    const wrapper = document.createElement('div');
+    wrapper.style.display = "flex";
+    wrapper.style.gap = "20px";
+    wrapper.style.overflowX = "auto";
+    wrapper.style.paddingTop = "10px";
+
+    AppState.bracket.rounds.forEach(round => {
+        const roundCol = document.createElement('div');
+        roundCol.style.minWidth = "260px"; // Expandido para acomodar el input
+        roundCol.innerHTML = `<h3>${round.name}</h3>`;
+
+        round.matches.forEach(match => {
+            const matchDiv = document.createElement('div');
+            matchDiv.style.border = "1px solid var(--border-color)";
+            matchDiv.style.marginBottom = "15px";
+            matchDiv.style.padding = "5px";
+            matchDiv.style.borderRadius = "4px";
+            matchDiv.style.backgroundColor = "var(--card-bg)";
+
+            const teamAClass = match.winnerId && match.teamA && match.winnerId == match.teamA.id ? 'bracket-team winner' : 'bracket-team';
+            const teamBClass = match.winnerId && match.teamB && match.winnerId == match.teamB.id ? 'bracket-team winner' : 'bracket-team';
+
+            // Estructura Flexbox para alinear nombre e input. event.stopPropagation() evita seleccionar ganador al escribir.
+            const tA = match.teamA ? `
+                <div class="${teamAClass}" style="display: flex; justify-content: space-between; align-items: center;" onclick="selectWinner('${match.id}', '${match.teamA.id}')">
+                    <span style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${match.teamA.name}</span>
+                    <input type="text" class="form-control" style="width: 55px; height: 35px; text-align: center; padding: 2px; margin-left: 10px;" placeholder="-" value="${match.scoreA || ''}" onchange="updateKnockoutScore('${match.id}', 'A', this.value)" onclick="event.stopPropagation()">
+                </div>` : `
+                <div class="bracket-team" style="display: flex; justify-content: space-between; align-items: center; color: #888;">
+                    <span>Por definir</span>
+                    <input type="text" class="form-control" style="width: 55px; height: 35px;" disabled>
+                </div>`;
+
+            const tB = match.teamB ? `
+                <div class="${teamBClass}" style="display: flex; justify-content: space-between; align-items: center;" onclick="selectWinner('${match.id}', '${match.teamB.id}')">
+                    <span style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${match.teamB.name}</span>
+                    <input type="text" class="form-control" style="width: 55px; height: 35px; text-align: center; padding: 2px; margin-left: 10px;" placeholder="-" value="${match.scoreB || ''}" onchange="updateKnockoutScore('${match.id}', 'B', this.value)" onclick="event.stopPropagation()">
+                </div>` : `
+                <div class="bracket-team" style="display: flex; justify-content: space-between; align-items: center; color: #888;">
+                    <span>Por definir</span>
+                    <input type="text" class="form-control" style="width: 55px; height: 35px;" disabled>
+                </div>`;
+
+            matchDiv.innerHTML = `${tA}${tB}`;
+            roundCol.appendChild(matchDiv);
+        });
+        wrapper.appendChild(roundCol);
+    });
+
+    container.appendChild(wrapper);
+}
+
+// Almacena el resultado individual de cada equipo en el nodo correspondiente
+window.updateKnockoutScore = function(matchId, teamKey, value) {
+    let foundMatch = null;
+    AppState.bracket.rounds.forEach(r => {
+        r.matches.forEach(m => { if (m.id === matchId) foundMatch = m; });
+    });
+    if (foundMatch) {
+        if (teamKey === 'A') foundMatch.scoreA = value;
+        else if (teamKey === 'B') foundMatch.scoreB = value;
+    }
+};
+
+// Valida que ambos resultados estén ingresados y transfiere la instancia del equipo a la siguiente ronda
+window.selectWinner = function(matchId, teamId) {
+    let foundMatch = null;
+    AppState.bracket.rounds.forEach(r => {
+        r.matches.forEach(m => { if (m.id === matchId) foundMatch = m; });
+    });
+
+    if (!foundMatch || !foundMatch.scoreA || !foundMatch.scoreB || foundMatch.scoreA.trim() === "" || foundMatch.scoreB.trim() === "") {
+        alert("Debes escribir el resultado para ambos equipos antes de seleccionar al ganador.");
+        return;
+    }
+
+    foundMatch.winnerId = teamId;
+    let winnerTeam = teamId == foundMatch.teamA.id ? foundMatch.teamA : foundMatch.teamB;
+
+    if (foundMatch.nextMatchId) {
+        let nextMatch = null;
+        AppState.bracket.rounds.forEach(r => {
+            r.matches.forEach(m => { if (m.id === foundMatch.nextMatchId) nextMatch = m; });
+        });
+        if (nextMatch) {
+            if (foundMatch.positionInNext === 'teamA') nextMatch.teamA = winnerTeam;
+            else nextMatch.teamB = winnerTeam;
+        }
+    }
+
+    renderKnockout();
 };
