@@ -2,6 +2,7 @@ function sortStandings(teamsArray) {
     return teamsArray.sort((a, b) => {
         if (b.points !== a.points) return b.points - a.points;
         if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+        if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
         if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;
         return 0; 
     });
@@ -19,7 +20,6 @@ function processMatchResult(matchId, scoreA, scoreB) {
 }
 
 function recalculateStandings() {
-    // 1. Reseteo imperativo y estricto para evitar duplicaciones de memoria
     AppState.teams.forEach(team => {
         team.points = 0;
         team.matchesPlayed = 0;
@@ -31,7 +31,6 @@ function recalculateStandings() {
         team.goalDifference = 0;
     });
 
-    // 2. Sumatoria exclusiva de partidos de fase regular/grupos finalizados
     AppState.matches.forEach(match => {
         if (match.isPlayed && match.stage.includes("Grupo")) {
             const teamA = AppState.teams.find(t => String(t.id) === String(match.teamA.id));
@@ -164,7 +163,6 @@ function generateKnockoutBracket() {
     let numGroups = Object.keys(AppState.groups).length;
     if (numGroups === 0) return;
 
-    // Calcular tamaño de la llave (K)
     let K = 2;
     if (numGroups >= 2 && numGroups < 3) K = 4;
     else if (numGroups >= 3 && numGroups < 5) K = 8;
@@ -175,44 +173,62 @@ function generateKnockoutBracket() {
     let seconds = [];
     let thirds = [];
 
-    // Extraer posiciones
     for (const [groupName, groupTeams] of Object.entries(AppState.groups)) {
         const sorted = sortStandings([...groupTeams]);
-        if (sorted[0]) firsts.push(sorted[0]);
-        if (sorted[1]) seconds.push(sorted[1]);
-        if (sorted[2]) thirds.push(sorted[2]);
+        if (sorted[0]) { sorted[0].sourceGroup = groupName; firsts.push(sorted[0]); }
+        if (sorted[1]) { sorted[1].sourceGroup = groupName; seconds.push(sorted[1]); }
+        if (sorted[2]) { sorted[2].sourceGroup = groupName; thirds.push(sorted[2]); }
     }
 
-    firsts = sortStandings(firsts);
-    seconds = sortStandings(seconds);
-    thirds = sortStandings(thirds);
-
-    let qualified = [];
-    qualified.push(...firsts);
-    qualified.push(...seconds);
-    
-    // Completar con mejores terceros si el número de grupos no cubre K
-    if (qualified.length < K) {
-        qualified.push(...thirds.slice(0, K - qualified.length));
-    } else if (qualified.length > K) {
-        qualified = qualified.slice(0, K);
-    }
-
-    // Armado de cruces: el mejor clasificado vs el peor clasificado
     let initialMatchups = [];
     let totalMatches = K / 2;
-    for (let i = 0; i < totalMatches; i++) {
-        initialMatchups.push({
-            teamA: qualified[i],
-            teamB: qualified[K - 1 - i]
-        });
+
+    if (numGroups === 2 && K === 4) {
+        initialMatchups.push({ teamA: firsts[0], teamB: seconds[1] });
+        initialMatchups.push({ teamA: firsts[1], teamB: seconds[0] });
+    } 
+    else if (numGroups === 4 && K === 8) {
+        initialMatchups.push({ teamA: firsts[0], teamB: seconds[1] });
+        initialMatchups.push({ teamA: firsts[2], teamB: seconds[3] });
+        initialMatchups.push({ teamA: firsts[1], teamB: seconds[0] });
+        initialMatchups.push({ teamA: firsts[3], teamB: seconds[2] });
+    } 
+    else if (numGroups === 8 && K === 16) {
+        initialMatchups.push({ teamA: firsts[0], teamB: seconds[1] });
+        initialMatchups.push({ teamA: firsts[2], teamB: seconds[3] });
+        initialMatchups.push({ teamA: firsts[4], teamB: seconds[5] });
+        initialMatchups.push({ teamA: firsts[6], teamB: seconds[7] });
+        initialMatchups.push({ teamA: firsts[1], teamB: seconds[0] });
+        initialMatchups.push({ teamA: firsts[3], teamB: seconds[2] });
+        initialMatchups.push({ teamA: firsts[5], teamB: seconds[4] });
+        initialMatchups.push({ teamA: firsts[7], teamB: seconds[6] });
+    } 
+    else {
+        let sortedThirds = sortStandings([...thirds]);
+        let bestThirds = sortedThirds.slice(0, K - (firsts.length + seconds.length));
+        
+        let pot1 = [...firsts];
+        let pot2 = [...seconds, ...bestThirds];
+        
+        let leftHalf = [];
+        let rightHalf = [];
+
+        for (let i = 0; i < totalMatches; i++) {
+            let t1 = pot1.shift() || { name: "Por definir" };
+            let index2 = pot2.findIndex(t => t.sourceGroup !== t1.sourceGroup);
+            if (index2 === -1) index2 = 0; 
+            let t2 = pot2.length > 0 ? pot2.splice(index2, 1)[0] : { name: "Por definir" };
+            
+            if (i % 2 === 0) leftHalf.push({ teamA: t1, teamB: t2 });
+            else rightHalf.push({ teamA: t1, teamB: t2 });
+        }
+        initialMatchups = [...leftHalf, ...rightHalf];
     }
 
     let rounds = [];
     let currentMatches = initialMatchups;
     let roundIndex = 0;
 
-    // Construcción del árbol y nodos de avance
     while (currentMatches.length > 0) {
         let roundName = "";
         if (currentMatches.length === 1) roundName = "Final";
@@ -220,6 +236,7 @@ function generateKnockoutBracket() {
         else if (currentMatches.length === 4) roundName = "Cuartos de Final";
         else if (currentMatches.length === 8) roundName = "Octavos de Final";
         else if (currentMatches.length === 16) roundName = "Dieciseisavos de Final";
+        else roundName = "Ronda Preliminar";
         
         let matchesObj = [];
         for (let i = 0; i < currentMatches.length; i++) {
@@ -227,7 +244,8 @@ function generateKnockoutBracket() {
                 id: `K-${roundIndex}-${i}`,
                 teamA: currentMatches[i].teamA || null,
                 teamB: currentMatches[i].teamB || null,
-                result: "",
+                scoreA: "",
+                scoreB: "",
                 winnerId: null,
                 nextMatchId: currentMatches.length > 1 ? `K-${roundIndex + 1}-${Math.floor(i / 2)}` : null,
                 positionInNext: i % 2 === 0 ? 'teamA' : 'teamB'
@@ -246,4 +264,5 @@ function generateKnockoutBracket() {
     }
 
     AppState.bracket = { rounds: rounds };
-}
+            }
+            
