@@ -64,12 +64,39 @@ function recalculateStandings() {
             teamB.goalDifference = teamB.goalsFor - teamB.goalsAgainst;
         }
     });
+
+    if (AppState.mode === 'tournament') {
+        updateKnockoutBracket();
+    }
 }
 
 function generateRoundRobin(teamsArray, groupPrefix = "") {
     let matches = [];
-    let localTeams = [...teamsArray];
     
+    if (teamsArray.length === 4) {
+        const fixtureMap = [
+            [ [0, 1], [2, 3] ],
+            [ [0, 2], [3, 1] ],
+            [ [3, 0], [1, 2] ]
+        ];
+
+        fixtureMap.forEach((round, rIndex) => {
+            round.forEach((pair, pIndex) => {
+                let teamA = teamsArray[pair[0]];
+                let teamB = teamsArray[pair[1]];
+                const uniqueId = groupPrefix ? `${groupPrefix}-R${rIndex}-M${pIndex}` : `R${rIndex}-M${pIndex}`;
+                const roundNum = rIndex + 1;
+                
+                let match = new Match(uniqueId, teamA, teamB, `Fecha ${roundNum}`);
+                match.roundNumber = roundNum;
+                match.groupName = groupPrefix;
+                matches.push(match);
+            });
+        });
+        return matches;
+    }
+
+    let localTeams = [...teamsArray];
     if (localTeams.length % 2 !== 0) {
         localTeams.push(new Team('BYE', 'Libre'));
     }
@@ -85,9 +112,8 @@ function generateRoundRobin(teamsArray, groupPrefix = "") {
             if (teamA.id !== 'BYE' && teamB.id !== 'BYE') {
                 const uniqueId = groupPrefix ? `${groupPrefix}-R${round}-M${i}` : `R${round}-M${i}`;
                 const roundNum = round + 1;
-                const stageLabel = `Fecha ${roundNum}`;
                 
-                let match = new Match(uniqueId, teamA, teamB, stageLabel);
+                let match = new Match(uniqueId, teamA, teamB, `Fecha ${roundNum}`);
                 match.roundNumber = roundNum;
                 match.groupName = groupPrefix;
                 matches.push(match);
@@ -159,110 +185,169 @@ function generateGroupStageMatches() {
     });
 }
 
-function generateKnockoutBracket() {
+function getTournamentStructureInfo() {
     let numGroups = Object.keys(AppState.groups).length;
-    if (numGroups === 0) return;
+    let totalTeams = 0;
+    for (const group in AppState.groups) {
+        totalTeams += AppState.groups[group].length;
+    }
+    
+    if (numGroups === 0) return { K: 0, bestThirdsNeeded: 0, dir: 0 };
 
-    let K = 2;
-    if (numGroups >= 2 && numGroups < 3) K = 4;
-    else if (numGroups >= 3 && numGroups < 5) K = 8;
-    else if (numGroups >= 5 && numGroups < 9) K = 16;
-    else if (numGroups >= 9 && numGroups <= 16) K = 32;
+    let K = Math.pow(2, Math.floor(Math.log2(totalTeams)));
+    if (K >= totalTeams && K > 2) K /= 2;
 
-    let firsts = [];
-    let seconds = [];
-    let thirds = [];
+    let dir = Math.floor(K / numGroups);
+    let bestThirdsNeeded = K % numGroups;
 
-    for (const [groupName, groupTeams] of Object.entries(AppState.groups)) {
-        const sorted = sortStandings([...groupTeams]);
-        if (sorted[0]) { sorted[0].sourceGroup = groupName; firsts.push(sorted[0]); }
-        if (sorted[1]) { sorted[1].sourceGroup = groupName; seconds.push(sorted[1]); }
-        if (sorted[2]) { sorted[2].sourceGroup = groupName; thirds.push(sorted[2]); }
+    return { K, bestThirdsNeeded, dir };
+}
+
+function getFixedBracketSlots() {
+    const { K, bestThirdsNeeded, dir } = getTournamentStructureInfo();
+    if (K === 0) return [];
+
+    let groupLetters = Object.keys(AppState.groups).sort();
+    let slots = [];
+
+    for (let i = 0; i < dir; i++) {
+        groupLetters.forEach(g => {
+            slots.push({ rank: i + 1, group: g, label: `${i + 1}º ${g}`, isGlobal: false });
+        });
     }
 
-    let initialMatchups = [];
-    let totalMatches = K / 2;
-
-    if (numGroups === 2 && K === 4) {
-        initialMatchups.push({ teamA: firsts[0], teamB: seconds[1] });
-        initialMatchups.push({ teamA: firsts[1], teamB: seconds[0] });
-    } 
-    else if (numGroups === 4 && K === 8) {
-        initialMatchups.push({ teamA: firsts[0], teamB: seconds[1] });
-        initialMatchups.push({ teamA: firsts[2], teamB: seconds[3] });
-        initialMatchups.push({ teamA: firsts[1], teamB: seconds[0] });
-        initialMatchups.push({ teamA: firsts[3], teamB: seconds[2] });
-    } 
-    else if (numGroups === 8 && K === 16) {
-        initialMatchups.push({ teamA: firsts[0], teamB: seconds[1] });
-        initialMatchups.push({ teamA: firsts[2], teamB: seconds[3] });
-        initialMatchups.push({ teamA: firsts[4], teamB: seconds[5] });
-        initialMatchups.push({ teamA: firsts[6], teamB: seconds[7] });
-        initialMatchups.push({ teamA: firsts[1], teamB: seconds[0] });
-        initialMatchups.push({ teamA: firsts[3], teamB: seconds[2] });
-        initialMatchups.push({ teamA: firsts[5], teamB: seconds[4] });
-        initialMatchups.push({ teamA: firsts[7], teamB: seconds[6] });
-    } 
-    else {
-        let sortedThirds = sortStandings([...thirds]);
-        let bestThirds = sortedThirds.slice(0, K - (firsts.length + seconds.length));
-        
-        let pot1 = [...firsts];
-        let pot2 = [...seconds, ...bestThirds];
-        
-        let leftHalf = [];
-        let rightHalf = [];
-
-        for (let i = 0; i < totalMatches; i++) {
-            let t1 = pot1.shift() || { name: "Por definir" };
-            let index2 = pot2.findIndex(t => t.sourceGroup !== t1.sourceGroup);
-            if (index2 === -1) index2 = 0; 
-            let t2 = pot2.length > 0 ? pot2.splice(index2, 1)[0] : { name: "Por definir" };
-            
-            if (i % 2 === 0) leftHalf.push({ teamA: t1, teamB: t2 });
-            else rightHalf.push({ teamA: t1, teamB: t2 });
-        }
-        initialMatchups = [...leftHalf, ...rightHalf];
+    for (let i = 0; i < bestThirdsNeeded; i++) {
+        slots.push({ rank: dir + 1, group: '?', label: `Mejor ${dir + 1}º #${i + 1}`, isGlobal: true, globalIndex: i });
     }
+
+    slots = slots.slice(0, K);
+
+    let p1 = slots.slice(0, K / 2);
+    let p2 = slots.slice(K / 2);
+    let matchups = [];
+
+    for (let i = 0; i < p1.length; i++) {
+        let slotA = p1[i];
+        let indexB = p2.findIndex(s => s.group !== slotA.group || s.group === '?');
+        if (indexB === -1) indexB = 0;
+        let slotB = p2.splice(indexB, 1)[0];
+        
+        if (i % 2 === 0) matchups.push({ slotA, slotB });
+        else matchups.unshift({ slotA, slotB });
+    }
+    return matchups;
+}
+
+function initializeKnockoutBracket() {
+    const { K } = getTournamentStructureInfo();
+    if (K === 0) return;
 
     let rounds = [];
-    let currentMatches = initialMatchups;
+    let matchCount = K / 2;
     let roundIndex = 0;
+    let initialSlots = getFixedBracketSlots();
 
-    while (currentMatches.length > 0) {
+    while (matchCount >= 1) {
         let roundName = "";
-        if (currentMatches.length === 1) roundName = "Final";
-        else if (currentMatches.length === 2) roundName = "Semifinales";
-        else if (currentMatches.length === 4) roundName = "Cuartos de Final";
-        else if (currentMatches.length === 8) roundName = "Octavos de Final";
-        else if (currentMatches.length === 16) roundName = "Dieciseisavos de Final";
+        if (matchCount === 1) roundName = "Final";
+        else if (matchCount === 2) roundName = "Semifinales";
+        else if (matchCount === 4) roundName = "Cuartos de Final";
+        else if (matchCount === 8) roundName = "Octavos de Final";
+        else if (matchCount === 16) roundName = "Dieciseisavos de Final";
         else roundName = "Ronda Preliminar";
         
         let matchesObj = [];
-        for (let i = 0; i < currentMatches.length; i++) {
-            matchesObj.push({
+        for (let i = 0; i < matchCount; i++) {
+            let matchDef = {
                 id: `K-${roundIndex}-${i}`,
-                teamA: currentMatches[i].teamA || null,
-                teamB: currentMatches[i].teamB || null,
+                teamA: null,
+                teamB: null,
                 scoreA: "",
                 scoreB: "",
                 winnerId: null,
-                nextMatchId: currentMatches.length > 1 ? `K-${roundIndex + 1}-${Math.floor(i / 2)}` : null,
+                nextMatchId: matchCount > 1 ? `K-${roundIndex + 1}-${Math.floor(i / 2)}` : null,
                 positionInNext: i % 2 === 0 ? 'teamA' : 'teamB'
-            });
+            };
+
+            if (roundIndex === 0 && initialSlots[i]) {
+                matchDef.slotA = initialSlots[i].slotA;
+                matchDef.slotB = initialSlots[i].slotB;
+            }
+
+            matchesObj.push(matchDef);
         }
         rounds.push({ name: roundName, matches: matchesObj });
         
-        if (currentMatches.length === 1) break;
-
-        let nextMatches = [];
-        for (let i = 0; i < currentMatches.length / 2; i++) {
-            nextMatches.push({ teamA: null, teamB: null });
-        }
-        currentMatches = nextMatches;
+        matchCount = matchCount / 2;
         roundIndex++;
     }
 
     AppState.bracket = { rounds: rounds };
+    updateKnockoutBracket();
+}
+
+function updateKnockoutBracket() {
+    if (!AppState.bracket || !AppState.bracket.rounds || AppState.bracket.rounds.length === 0) return;
+
+    const { dir, bestThirdsNeeded } = getTournamentStructureInfo();
+    let allMatchesPlayed = AppState.matches.filter(m => m.stage.includes("Grupo") && !m.isPlayed).length === 0;
+
+    let lockedTeamsByGroup = {};
+    for (const [groupName, groupTeams] of Object.entries(AppState.groups)) {
+        let standings = sortStandings([...groupTeams]);
+        
+        // Cálculo de puntos máximos posibles por equipo
+        standings.forEach(t => {
+            let unplayed = AppState.matches.filter(m => !m.isPlayed && m.stage.includes("Grupo") && (m.teamA.id === t.id || m.teamB.id === t.id)).length;
+            t.maxPts = t.points + (unplayed * 3);
+        });
+
+        let allGroupPlayed = AppState.matches.filter(m => m.groupName === groupName && !m.isPlayed).length === 0;
+        let locked = {};
+
+        // Bloqueo de instancias matemáticas
+        if (allGroupPlayed) {
+            standings.forEach((t, i) => locked[i + 1] = t);
+        } else {
+            if (standings.length > 1 && standings[0].points > standings[1].maxPts) {
+                locked[1] = standings[0];
+                if (standings.length > 2 && standings[1].points > standings[2].maxPts) {
+                    locked[2] = standings[1];
+                    if (standings.length > 3 && standings[2].points > standings[3].maxPts) {
+                        locked[3] = standings[2];
+                    }
+                }
             }
-            
+        }
+        lockedTeamsByGroup[groupName] = locked;
+    }
+
+    // Resolución de cupos condicionados (Mejores Terceros) al finalizar la totalidad de grupos
+    let globalThirds = [];
+    if (allMatchesPlayed && bestThirdsNeeded > 0) {
+        let thirds = [];
+        for (const groupName in AppState.groups) {
+            let st = sortStandings([...AppState.groups[groupName]]);
+            if (st[dir]) thirds.push(st[dir]);
+        }
+        globalThirds = sortStandings(thirds);
+    }
+
+    let round0 = AppState.bracket.rounds[0];
+    round0.matches.forEach(m => {
+        if (m.slotA) {
+            if (!m.slotA.isGlobal) {
+                m.teamA = lockedTeamsByGroup[m.slotA.group][m.slotA.rank] || null;
+            } else {
+                m.teamA = allMatchesPlayed ? (globalThirds[m.slotA.globalIndex] || null) : null;
+            }
+        }
+        if (m.slotB) {
+            if (!m.slotB.isGlobal) {
+                m.teamB = lockedTeamsByGroup[m.slotB.group][m.slotB.rank] || null;
+            } else {
+                m.teamB = allMatchesPlayed ? (globalThirds[m.slotB.globalIndex] || null) : null;
+            }
+        }
+    });
+}
