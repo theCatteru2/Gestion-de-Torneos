@@ -12,6 +12,7 @@
         <div class="file-controls">
             <button id="btn-save" class="btn-primary">Guardar Torneo</button>
             <input type="file" id="input-load" accept=".json">
+            <button id="btn-theme" class="btn-primary" style="margin-left: auto; background-color: #555;">Alternar Tema</button>
         </div>
         <nav id="tabs">
             <button class="tab-btn active" data-target="config">Configuración</button>
@@ -64,9 +65,7 @@
                         <option value="64">64 Equipos (16 Grupos, Dieciseisavos)</option>
                     </select>
                 </div>
-                <div id="pots-container">
-                    <!-- Los textareas de los 4 bombos se generarán aquí mediante JS -->
-                </div>
+                <div id="pots-container"></div>
                 <button id="btn-draw" class="btn-primary" style="background-color: #28a745; margin-bottom: 15px;">Realizar Sorteo</button>
                 <div id="draw-results"></div>
             </div>
@@ -95,7 +94,6 @@
         </section>
     </main>
 
-    <!-- Archivos JavaScript en orden estricto de dependencia -->
     <script src="js/models.js"></script>
     <script src="js/logic.js"></script>
     <script src="js/ui.js"></script>
